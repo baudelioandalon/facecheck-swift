@@ -1,0 +1,174 @@
+name: Release
+
+# Publica la libreria cuando el archivo VERSION cambia a una version nueva.
+#
+# QUE SIGNIFICA "PUBLICAR" EN iOS, que no es lo mismo que en Android:
+#
+#   Swift Package Manager  no tiene registro central. Publicar es CREAR UN TAG
+#                          de git: quien la consuma apunta a este repositorio y
+#                          a una version, y SPM la resuelve contra los tags.
+#                          No se sube nada a ningun lado.
+#
+#   CocoaPods              si tiene registro central (trunk). Ahi si se sube, y
+#                          una version publicada en trunk es PERMANENTE: no se
+#                          puede borrar ni reemplazar, igual que Maven Central.
+#
+# Por eso el disparador es el mismo que en las librerias de Kotlin: la version
+# declarada en VERSION todavia no existe. Un push sin subir la version termina
+# en verde sin hacer nada.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  # Escritura: el tag y la GitHub Release son la publicacion para SPM.
+  contents: write
+
+jobs:
+  gate:
+    name: Revisar la version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+      publish: ${{ steps.check.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Los tags son la fuente de verdad de que esta publicado; con el
+          # checkout superficial por defecto no llegan.
+          fetch-depth: 0
+
+      - id: check
+        run: |
+          set -euo pipefail
+          version="$(tr -d ' \r\n' < VERSION)"
+          [[ -n "$version" ]] || { echo "::error::el archivo VERSION esta vacio"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Version declarada: $version"
+
+          if git rev-parse "refs/tags/$version" >/dev/null 2>&1; then
+            echo "::notice::el tag $version ya existe. Sube VERSION para publicar una version nueva."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "$version no tiene tag todavia. Se publica."
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  publish:
+    name: Publicar ${{ needs.gate.outputs.version }}
+    needs: gate
+    if: needs.gate.outputs.publish == 'true'
+    runs-on: macos-15
+    environment: release
+    env:
+      # A nivel de job, no de paso: el `if:` de un paso se evalua ANTES de
+      # aplicar su propio `env:`, asi que declararlo alla abajo dejaba la
+      # condicion siempre en falso y el push a CocoaPods no corria nunca.
+      COCOAPODS_TRUNK_TOKEN: ${{ secrets.COCOAPODS_TRUNK_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Las pruebas ANTES de crear el tag. Un tag que apunta a codigo roto ya lo
+      # pudo resolver alguien, y moverlo despues rompe a quien lo fijo.
+      - name: Probar
+        run: swift test
+
+      - name: Validar el podspec
+        run: pod lib lint FaceCheck.podspec --allow-warnings --fail-fast
+
+      - name: Verificar que el podspec y VERSION coinciden
+        run: |
+          set -euo pipefail
+          # El podspec lee VERSION, asi que no deberian separarse nunca; esto
+          # atrapa que alguien haya vuelto a escribir la version a mano.
+          pod_version="$(pod ipc spec FaceCheck.podspec | python3 -c 'import json,sys; print(json.load(sys.stdin)["version"])')"
+          archivo="$(tr -d ' \r\n' < VERSION)"
+          [[ "$pod_version" == "$archivo" ]] || {
+            echo "::error::el podspec dice $pod_version y VERSION dice $archivo"
+            exit 1
+          }
+          echo "ambos dicen $archivo"
+
+      - name: Crear el tag
+        env:
+          VERSION: ${{ needs.gate.outputs.version }}
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Anotado, no ligero: lleva fecha y autor, y es lo que espera cualquier
+          # herramienta que lea el historial de versiones.
+          git tag -a "$VERSION" -m "FaceCheck $VERSION"
+          git push origin "$VERSION"
+          echo "tag $VERSION creado: SPM ya puede resolver esta version"
+
+      - name: Publicar la GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.gate.outputs.version }}
+        run: |
+          set -euo pipefail
+          notas="CHANGELOG.md"
+          if [[ -f "$notas" ]]; then
+            gh release create "$VERSION" --title "FaceCheck $VERSION" --notes-file "$notas"
+          else
+            gh release create "$VERSION" --title "FaceCheck $VERSION" --generate-notes
+          fi
+
+      # Opcional a proposito. Publicar en trunk exige registrarse una vez desde
+      # una maquina con acceso al correo (`pod trunk register`), que es un paso
+      # humano irreductible. Sin el token, SPM ya quedo publicado y el job no
+      # falla por algo que no es un error.
+      - name: Publicar en CocoaPods trunk
+        if: env.COCOAPODS_TRUNK_TOKEN != ''
+        run: pod trunk push FaceCheck.podspec --allow-warnings
+
+      - name: Resumen
+        env:
+          VERSION: ${{ needs.gate.outputs.version }}
+        run: |
+          {
+            echo "### FaceCheck $VERSION"
+            echo
+            echo "**Swift Package Manager** — publicado (el tag \`$VERSION\` ya se resuelve):"
+            echo
+            echo '```swift'
+            echo ".package(url: \"https://github.com/${{ github.repository }}.git\", from: \"$VERSION\")"
+            echo '```'
+            echo
+            if [[ -n "$COCOAPODS_TRUNK_TOKEN" ]]; then
+              echo "**CocoaPods** — publicado en trunk:"
+              echo
+              echo '```ruby'
+              echo "pod 'FaceCheck', '~> $VERSION'"
+              echo '```'
+            else
+              echo "**CocoaPods** — omitido: falta el secreto \`COCOAPODS_TRUNK_TOKEN\`."
+              echo "Para habilitarlo, corre \`pod trunk register <correo> '<nombre>'\` una vez,"
+              echo "confirma el enlace que llega por correo y guarda el token de"
+              echo "\`~/.netrc\` como secreto del repositorio."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  sin-cambios:
+    name: Sin version nueva
+    needs: gate
+    if: needs.gate.outputs.publish != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          {
+            echo "### Nada que publicar"
+            echo
+            echo "El tag \`${{ needs.gate.outputs.version }}\` ya existe."
+            echo
+            echo "Para publicar, sube el numero en el archivo \`VERSION\`."
+          } >> "$GITHUB_STEP_SUMMARY"

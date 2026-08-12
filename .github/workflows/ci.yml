@@ -1,0 +1,80 @@
+name: CI
+
+# Compila y prueba. No publica: de eso se encarga release.yml cuando sube VERSION.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # El paquete declara .iOS(.v15), pero `swift build` compila para macOS. Los dos
+  # jobs existen porque cada uno atrapa algo que el otro no: `swift test` en macOS
+  # corre la logica pura (maquina de retos, multipart, redaccion del logger) y es
+  # rapido; el build para el simulador es lo unico que compila de verdad el codigo
+  # de AVFoundation y Vision con la disponibilidad de iOS.
+  logica:
+    name: Pruebas de logica (macOS)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version de Swift
+        run: swift --version
+
+      - name: Compilar
+        run: swift build
+
+      - name: Probar
+        run: swift test
+
+  ios:
+    name: Compilar para iOS (simulador)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Elegir un simulador disponible
+        id: sim
+        run: |
+          set -euo pipefail
+          # Fijar "iPhone 16" a mano rompe el CI el dia que el runner cambia de
+          # imagen y ese modelo desaparece, con un error que no dice que paso.
+          # Se toma el primer iPhone que el runner tenga.
+          nombre="$(xcrun simctl list devices available \
+            | grep -oE '^ *iPhone [^(]*' \
+            | head -1 | sed 's/^ *//; s/ *$//')"
+          [[ -n "$nombre" ]] || { echo "::error::el runner no tiene simuladores de iPhone"; exit 1; }
+          echo "nombre=$nombre" >> "$GITHUB_OUTPUT"
+          echo "simulador: $nombre"
+
+      - name: Compilar
+        run: |
+          set -euo pipefail
+          xcodebuild build \
+            -scheme FaceCheck \
+            -destination "platform=iOS Simulator,name=${{ steps.sim.outputs.nombre }}" \
+            -skipPackagePluginValidation \
+            | xcbeautify || xcodebuild build \
+                -scheme FaceCheck \
+                -destination "platform=iOS Simulator,name=${{ steps.sim.outputs.nombre }}" \
+                -skipPackagePluginValidation
+
+  podspec:
+    name: Validar el podspec
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      # `pod lib lint` es lo unico que atrapa un podspec roto antes de intentar
+      # publicarlo. Falla tarde y sin explicacion si se descubre en `trunk push`.
+      - name: Validar
+        run: pod lib lint FaceCheck.podspec --allow-warnings --fail-fast

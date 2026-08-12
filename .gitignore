@@ -1,0 +1,38 @@
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+*.xcodeproj
+*.xcworkspace
+
+# Xcode
+DerivedData/
+xcuserdata/
+*.hmap
+*.ipa
+*.dSYM.zip
+*.xcframework/
+
+# CocoaPods
+Pods/
+
+# Credenciales. En el monorepo privado estas reglas se heredaban; como
+# repositorio independiente hay que declararlas aqui o dejan de existir.
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+*.cer
+*.mobileprovision
+*.certSigningRequest
+GoogleService-Info.plist
+
+# IDE
+.idea/
+.vscode/
+.fleet/
+
+# SO
+.DS_Store
