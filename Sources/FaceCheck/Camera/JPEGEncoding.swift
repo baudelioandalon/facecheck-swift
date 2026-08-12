@@ -74,7 +74,15 @@ enum JPEGEncoding {
     /// instance compiles and caches its own GPU pipeline state, so a fresh
     /// context on a per-frame path costs more than everything else on that path
     /// combined. A `static let` gives lazy, thread-safe initialisation.
-    static let context = CIContext()
+    ///
+    /// `nonisolated(unsafe)` because whether `CIContext` is `Sendable` depends
+    /// on the SDK: Xcode 26 annotates it, Xcode 16.4 does not. Without this the
+    /// package builds on a recent Mac and fails on a CI runner with an older
+    /// one — which is precisely how this was found, after a local build that
+    /// looked clean. The annotation is a claim, not a silencer: Apple documents
+    /// CIContext as thread-safe, and sharing one across queues is the use the
+    /// class is designed for.
+    nonisolated(unsafe) static let context = CIContext()
 }
 
 private extension UIImage {

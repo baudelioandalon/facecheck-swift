@@ -21,6 +21,23 @@ Para compilar de verdad lo que toca AVFoundation y Vision hace falta iOS:
 xcodebuild -scheme FaceCheck -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build
 ```
 
+### Tu Xcode compila más de lo que compila el de CI
+
+Esto ya costó una publicación rota, así que vale la pena decirlo: el runner de
+GitHub trae **Xcode 16.4 (Swift 6.0)** y tu Mac probablemente traiga uno más
+nuevo. Swift 6.3 aceptó cosas que 6.0 rechaza, y el código que solo tú compilas
+es código que ningún integrador con Xcode 16 puede usar.
+
+Las dos que ya mordieron:
+
+- `CIContext` es `Sendable` en el SDK de Xcode 26 y no en el de 16.4. De ahí el
+  `nonisolated(unsafe)` en `JPEGEncoding`.
+- Swift 6.0 exige `self.` explícito dentro de una closure que escapa, aunque
+  haya `guard let self`. Swift 6.3 ya no.
+
+Si tocas la capa de cámara, da por hecho que un `swift build` verde en tu
+máquina no dice nada sobre CI. Empuja a una rama y deja que CI opine.
+
 Antes de publicar, valida el podspec:
 
 ```bash

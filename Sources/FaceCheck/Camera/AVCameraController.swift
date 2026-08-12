@@ -365,13 +365,18 @@ public final class AVCameraController: CameraController, @unchecked Sendable {
                 forName: .AVCaptureSessionRuntimeError,
                 object: session,
                 queue: nil
+            // The `self.` on every member below is not noise and not style:
+            // Swift 6.0 (Xcode 16.4) still requires it inside an escaping
+            // closure even after `guard let self`. Swift 6.3 relaxed the rule,
+            // so dropping it compiles on a recent Mac and breaks the build for
+            // anyone on Xcode 16 — which is a supported toolchain here.
             ) { [weak self] note in
                 let reason = (note.userInfo?[AVCaptureSessionErrorKey] as? NSError)?
                     .localizedDescription ?? "unknown"
                 self?.sessionQueue.async { [weak self] in
                     guard let self else { return }
                     FaceCheckLogger.error("capture session runtime error: \(reason)")
-                    fail(Self.cameraUnavailable(Self.cameraLostMessage))
+                    self.fail(Self.cameraUnavailable(Self.cameraLostMessage))
                 }
             },
             center.addObserver(
@@ -383,7 +388,7 @@ public final class AVCameraController: CameraController, @unchecked Sendable {
                 self?.sessionQueue.async { [weak self] in
                     guard let self else { return }
                     FaceCheckLogger.warn("capture session interrupted, reason \(reason)")
-                    fail(Self.cameraUnavailable(Self.cameraLostMessage))
+                    self.fail(Self.cameraUnavailable(Self.cameraLostMessage))
                 }
             },
             center.addObserver(
@@ -392,9 +397,9 @@ public final class AVCameraController: CameraController, @unchecked Sendable {
                 queue: nil
             ) { [weak self] _ in
                 self?.sessionQueue.async { [weak self] in
-                    guard let self, running, !session.isRunning else { return }
+                    guard let self, self.running, !self.session.isRunning else { return }
                     FaceCheckLogger.info("capture session interruption ended; resuming")
-                    session.startRunning()
+                    self.session.startRunning()
                 }
             }
         ]
