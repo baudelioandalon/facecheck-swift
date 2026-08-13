@@ -117,7 +117,7 @@ public struct FaceCheckConfig: Sendable, Equatable, Hashable,
     /// 5. `http://` or `https://` prefix → "baseUrl debe ser una URL http(s) completa."
     /// 6. ``FaceCheckMode/live`` over `http://` → "Una llave 'lk_live_' exige HTTPS."
     ///    Refused outright rather than warned about, because a production key
-    ///    against a cleartext endpoint puts a selfie and an email on the wire in
+    ///    against a cleartext endpoint puts a selfie and a subject ID on the wire in
     ///    the clear and the SDK will not get a second chance to be noticed. A
     ///    test key against `http://127.0.0.1:5001` is accepted; that is what
     ///    plain http is for.
@@ -173,7 +173,7 @@ public struct FaceCheckConfig: Sendable, Equatable, Hashable,
             throw Self.invalid("baseUrl debe ser una URL http(s) completa.")
         }
         // A production key against a cleartext endpoint would put a selfie and an
-        // email on the wire in the clear. Refused outright rather than warned
+        // subject ID on the wire in the clear. Refused outright rather than warned
         // about, because the SDK will not get a second chance to be noticed.
         if derivedMode == .live && normalized.hasPrefix("http://") {
             throw Self.invalid("Una llave 'lk_live_' exige HTTPS.")

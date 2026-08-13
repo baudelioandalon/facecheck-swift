@@ -7,6 +7,21 @@ Una versión publicada en CocoaPods trunk es permanente. Los tags de git podría
 moverse, pero no se mueven: quien fijó una versión con Swift Package Manager
 espera que siga significando lo mismo.
 
+## [Sin publicar]
+
+### Cambiado
+
+- **Ruptura de API:** `FaceCheck.enroll` y `FaceCheck.verify` ahora requieren
+  `subjectId:`; el campo multipart `email` fue eliminado.
+- Se reemplazaron `MISSING_EMAIL` e `INVALID_EMAIL` por
+  `MISSING_SUBJECT_ID` e `INVALID_SUBJECT_ID`.
+
+### Agregado
+
+- `FaceCheckSubjectId.generate(apiKey:)` crea IDs opacos con una huella SHA-256
+  codificada en Base32 y 128 bits aleatorios de `SecRandomCopyBytes`; no expone
+  la llave de API.
+
 ## [0.1.0] — 2026-08-12
 
 Primera publicación. Port nativo de Swift del SDK de Kotlin Multiplatform, con

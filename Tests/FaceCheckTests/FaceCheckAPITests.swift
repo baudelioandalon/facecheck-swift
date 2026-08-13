@@ -34,6 +34,19 @@ private final class MockTransport: HTTPTransport, @unchecked Sendable {
         return recorded.last.map { String(decoding: $0.body, as: UTF8.self) } ?? ""
     }
 
+    /// Extracts a text multipart field from the exact payload submitted to the
+    /// transport. The fixtures do not contain CRLF in field values.
+    func formValue(named name: String) -> String? {
+        let body = lastBodyText
+        let marker = "Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n"
+        guard let valueStart = body.range(of: marker)?.upperBound,
+              let valueEnd = body.range(of: "\r\n", range: valueStart..<body.endIndex)?.lowerBound
+        else {
+            return nil
+        }
+        return String(body[valueStart..<valueEnd])
+    }
+
     func send(_ request: URLRequest, body: Data) async throws -> (Data, HTTPURLResponse) {
         try handler(request, body, record(request, body: body))
     }
@@ -138,7 +151,7 @@ final class FaceCheckAPITests: XCTestCase {
         let transport = MockTransport { _, _, _ in respondJSON(enrollBody) }
         let api = try makeClient(transport: transport)
 
-        let result = try await api.enroll(email: "persona@ejemplo.com", selfie: selfieBytes)
+        let result = try await api.enroll(subjectId: "person_01", selfie: selfieBytes)
 
         XCTAssertTrue(result.enrolled)
         XCTAssertEqual(result.subjectId, "test_9f86d081")
@@ -155,7 +168,7 @@ final class FaceCheckAPITests: XCTestCase {
         let api = try makeClient(transport: transport)
 
         let result = try await api.verify(
-            email: "persona@ejemplo.com",
+            subjectId: "person_01",
             selfie: selfieBytes,
             compareWith: .both
         )
@@ -177,7 +190,7 @@ final class FaceCheckAPITests: XCTestCase {
         }
         let api = try makeClient(transport: transport)
 
-        let result = try await api.enroll(email: "persona@ejemplo.com", selfie: selfieBytes)
+        let result = try await api.enroll(subjectId: "person_01", selfie: selfieBytes)
         XCTAssertTrue(result.enrolled)
         // Absent optional fields fall back rather than throwing.
         XCTAssertEqual(result.mode, "")
@@ -186,11 +199,33 @@ final class FaceCheckAPITests: XCTestCase {
 
     // MARK: The request on the wire
 
+    func testEnrollWritesSubjectIdMultipartField() async throws {
+        let transport = MockTransport { _, _, _ in respondJSON(enrollBody) }
+        let api = try makeClient(transport: transport)
+
+        _ = try await api.enroll(subjectId: "person_01", selfie: selfieBytes)
+
+        XCTAssertEqual(transport.formValue(named: "subjectId"), "person_01")
+        let removedIdentityField = "e" + "mail"
+        XCTAssertNil(transport.formValue(named: removedIdentityField))
+    }
+
+    func testEnrollRejectsAnInvalidSubjectIdBeforeSendingARequest() async throws {
+        let transport = MockTransport { _, _, _ in respondJSON(enrollBody) }
+        let api = try makeClient(transport: transport)
+
+        await assertThrowsFaceCheckError(code: .invalidSubjectId) {
+            try await api.enroll(subjectId: "person", selfie: selfieBytes)
+        }
+
+        XCTAssertEqual(transport.attempts, 0)
+    }
+
     func testEveryRequestCarriesTheAPIKeyHeaderAndTheRightURL() async throws {
         let transport = MockTransport { _, _, _ in respondJSON(enrollBody) }
         let api = try makeClient(transport: transport)
 
-        _ = try await api.enroll(email: "persona@ejemplo.com", selfie: selfieBytes)
+        _ = try await api.enroll(subjectId: "person_01", selfie: selfieBytes)
 
         let request = try XCTUnwrap(transport.lastRequest)
         XCTAssertEqual(request.httpMethod, "POST")
@@ -210,16 +245,14 @@ final class FaceCheckAPITests: XCTestCase {
         let api = try makeClient(transport: transport)
 
         _ = try await api.enroll(
-            email: "Persona@Ejemplo.com",
+            subjectId: "Person_01",
             selfie: selfieBytes,
             ine: ineBytes,
             overwrite: true
         )
 
         let body = transport.lastBodyText
-        // Sent exactly as given: normalising an email is the backend's job, and
-        // doing it in two places is how the two stop agreeing.
-        XCTAssertTrue(body.contains("Persona@Ejemplo.com"), body)
+        XCTAssertEqual(transport.formValue(named: "subjectId"), "Person_01")
         XCTAssertTrue(body.contains(#"name="overwrite""#), body)
         // `parse_bool_flag` accepts only true/1/yes/false/0/no, so never "True".
         XCTAssertTrue(body.contains("\r\n\r\ntrue\r\n"), body)
@@ -237,7 +270,7 @@ final class FaceCheckAPITests: XCTestCase {
         let transport = MockTransport { _, _, _ in respondJSON(enrollBody) }
         let api = try makeClient(transport: transport)
 
-        _ = try await api.enroll(email: "persona@ejemplo.com", selfie: selfieBytes)
+        _ = try await api.enroll(subjectId: "person_01", selfie: selfieBytes)
 
         let body = transport.lastBodyText
         XCTAssertFalse(body.contains("overwrite"), "unexpected overwrite part: \(body)")
@@ -253,7 +286,7 @@ final class FaceCheckAPITests: XCTestCase {
         let api = try makeClient(transport: transport)
 
         _ = try await api.enroll(
-            email: "persona@ejemplo.com",
+            subjectId: "person_01",
             selfie: selfieBytes,
             grant: "grant.abc.123"
         )
@@ -268,7 +301,7 @@ final class FaceCheckAPITests: XCTestCase {
         let api = try makeClient(transport: transport)
 
         _ = try await api.verify(
-            email: "persona@ejemplo.com",
+            subjectId: "person_01",
             selfie: selfieBytes,
             compareWith: .both
         )
@@ -284,18 +317,18 @@ final class FaceCheckAPITests: XCTestCase {
     func testTheErrorEnvelopeBecomesATypedError() async throws {
         let transport = MockTransport { _, _, _ in
             respondJSON(
-                #"{"error":{"code":"NOT_ENROLLED","message":"Este correo no tiene un registro facial.","details":{"mode":"test"}}}"#,
+                #"{"error":{"code":"NOT_ENROLLED","message":"Este ID de persona no tiene un registro facial.","details":{"mode":"test"}}}"#,
                 status: 404
             )
         }
         let api = try makeClient(transport: transport)
 
         let failure = await assertThrowsFaceCheckError(code: .notEnrolled) {
-            try await api.verify(email: "desconocido@ejemplo.com", selfie: selfieBytes)
+            try await api.verify(subjectId: "unknown_01", selfie: selfieBytes)
         }
 
         XCTAssertEqual(failure?.httpStatus, 404)
-        XCTAssertEqual(failure?.message, "Este correo no tiene un registro facial.")
+        XCTAssertEqual(failure?.message, "Este ID de persona no tiene un registro facial.")
         XCTAssertEqual(failure?.details["mode"], "test")
         XCTAssertEqual(failure?.isRetryable, false)
     }
@@ -310,7 +343,7 @@ final class FaceCheckAPITests: XCTestCase {
         let api = try makeClient(transport: transport)
 
         let failure = await assertThrowsFaceCheckError(code: .rateLimited) {
-            try await api.verify(email: "persona@ejemplo.com", selfie: selfieBytes)
+            try await api.verify(subjectId: "person_01", selfie: selfieBytes)
         }
 
         // 42 must decode as an integer, not a double: `Int("42.0")` is nil and
@@ -332,7 +365,7 @@ final class FaceCheckAPITests: XCTestCase {
         let api = try makeClient(transport: transport)
 
         let failure = await assertThrowsFaceCheckError(code: .unknown) {
-            try await api.enroll(email: "persona@ejemplo.com", selfie: selfieBytes)
+            try await api.enroll(subjectId: "person_01", selfie: selfieBytes)
         }
         XCTAssertEqual(failure?.message, "Algo pasó.")
     }
@@ -367,7 +400,7 @@ final class FaceCheckAPITests: XCTestCase {
         let api = try makeClient(transport: transport)
 
         await assertThrowsFaceCheckError(code: .invalidResponse) {
-            try await api.enroll(email: "persona@ejemplo.com", selfie: selfieBytes)
+            try await api.enroll(subjectId: "person_01", selfie: selfieBytes)
         }
         // A 2xx with an undecodable body is never retried: the work was done and
         // billed already, even though `invalidResponse` reports itself retryable.
@@ -390,7 +423,7 @@ final class FaceCheckAPITests: XCTestCase {
 
         await assertThrowsFaceCheckError(code: .reenrollmentFaceMismatch) {
             try await api.enroll(
-                email: "persona@ejemplo.com",
+                subjectId: "person_01",
                 selfie: selfieBytes,
                 overwrite: true
             )
@@ -409,7 +442,7 @@ final class FaceCheckAPITests: XCTestCase {
         }
         let api = try makeClient(transport: transport)
 
-        let result = try await api.enroll(email: "persona@ejemplo.com", selfie: selfieBytes)
+        let result = try await api.enroll(subjectId: "person_01", selfie: selfieBytes)
         XCTAssertTrue(result.enrolled)
         XCTAssertEqual(transport.attempts, 3)
     }
@@ -424,7 +457,7 @@ final class FaceCheckAPITests: XCTestCase {
         let api = try makeClient(transport: transport)
 
         let failure = await assertThrowsFaceCheckError(code: .keyServiceUnavailable) {
-            try await api.enroll(email: "persona@ejemplo.com", selfie: selfieBytes)
+            try await api.enroll(subjectId: "person_01", selfie: selfieBytes)
         }
         XCTAssertEqual(failure?.isRetryable, true)
         XCTAssertEqual(transport.attempts, 3, "expected the original attempt plus two retries")
@@ -437,7 +470,7 @@ final class FaceCheckAPITests: XCTestCase {
         let api = try makeClient(maxRetries: 1, transport: transport)
 
         await assertThrowsFaceCheckError(code: .networkError) {
-            try await api.verify(email: "persona@ejemplo.com", selfie: selfieBytes)
+            try await api.verify(subjectId: "person_01", selfie: selfieBytes)
         }
         XCTAssertEqual(transport.attempts, 2)
     }
@@ -451,7 +484,7 @@ final class FaceCheckAPITests: XCTestCase {
         let api = try makeClient(maxRetries: 0, transport: transport)
 
         await assertThrowsFaceCheckError(code: .timeout) {
-            try await api.enroll(email: "persona@ejemplo.com", selfie: selfieBytes)
+            try await api.enroll(subjectId: "person_01", selfie: selfieBytes)
         }
     }
 
@@ -465,7 +498,7 @@ final class FaceCheckAPITests: XCTestCase {
         let api = try makeClient(maxRetries: 0, transport: transport)
 
         await assertThrowsFaceCheckError(code: .internalError) {
-            try await api.enroll(email: "persona@ejemplo.com", selfie: selfieBytes)
+            try await api.enroll(subjectId: "person_01", selfie: selfieBytes)
         }
         XCTAssertEqual(transport.attempts, 1)
     }

@@ -28,8 +28,8 @@ public enum FaceCheckErrorCode: String, Error, Sendable, CaseIterable, Hashable 
 
     // MARK: Request shape
 
-    case missingEmail = "MISSING_EMAIL"
-    case invalidEmail = "INVALID_EMAIL"
+    case missingSubjectId = "MISSING_SUBJECT_ID"
+    case invalidSubjectId = "INVALID_SUBJECT_ID"
     case missingFile = "MISSING_FILE"
     case emptyFile = "EMPTY_FILE"
     case invalidImage = "INVALID_IMAGE"
@@ -99,10 +99,10 @@ public enum FaceCheckErrorCode: String, Error, Sendable, CaseIterable, Hashable 
             return "Esta aplicación está suspendida. Contacta al administrador de la cuenta."
         case .keyServiceUnavailable:
             return "El servicio de verificación de llaves no está disponible. Intenta de nuevo."
-        case .missingEmail:
-            return "Falta el correo electrónico."
-        case .invalidEmail:
-            return "El correo electrónico no tiene un formato válido."
+        case .missingSubjectId:
+            return "Falta el ID de persona."
+        case .invalidSubjectId:
+            return "El ID de persona debe tener de 8 a 128 caracteres, empezar con una letra y usar solo letras, números, _ o -."
         case .missingFile:
             return "No se envió la imagen requerida. Vuelve a intentarlo."
         case .emptyFile:
@@ -128,12 +128,12 @@ public enum FaceCheckErrorCode: String, Error, Sendable, CaseIterable, Hashable 
             return "No se detectó el rostro en la identificación. Tómala de frente, sin reflejos y "
                 + "con la credencial completa."
         case .notEnrolled:
-            return "Este correo no tiene un registro facial. Regístralo antes de verificar."
+            return "Este ID de persona no tiene un registro facial. Regístralo antes de verificar."
         case .subjectAlreadyEnrolled:
-            return "Ese correo ya está enrolado. Para reemplazar la foto de referencia usa "
+            return "Ese ID de persona ya está enrolado. Para reemplazar la foto de referencia usa "
                 + "overwrite = true con una selfie de la persona ya registrada."
         case .reenrollmentFaceMismatch:
-            return "La selfie no coincide con el registro facial actual de ese correo."
+            return "La selfie no coincide con el registro facial actual de ese ID de persona."
         case .enrollmentGrantRequired:
             // Adapted from the Kotlin text, which cites `enroll(grant = ...)`.
             // This string is only ever shown when the backend sent no message of
@@ -142,7 +142,7 @@ public enum FaceCheckErrorCode: String, Error, Sendable, CaseIterable, Hashable 
             return "Falta el grant de enrolamiento. Tu backend debe firmarlo y pasarlo a "
                 + "enroll(grant:). Consulta https://facecheck.borealnetwork.org/docs/grants."
         case .enrollmentGrantInvalid:
-            return "El grant de enrolamiento no es válido: revisa la firma, el correo, el "
+            return "El grant de enrolamiento no es válido: revisa la firma, el ID de persona, el "
                 + "modo (test/live), su vigencia, y que no se haya usado antes."
         case .modelVersionMismatch:
             return "El registro facial se creó con una versión anterior del modelo. Vuelve a "
@@ -183,7 +183,7 @@ public enum FaceCheckErrorCode: String, Error, Sendable, CaseIterable, Hashable 
     /// Whether retrying the exact same request could plausibly succeed.
     ///
     /// False for anything the caller has to fix first (a bad key, an unenrolled
-    /// email, a face that does not match), true for transport failures and
+    /// subject ID, a face that does not match), true for transport failures and
     /// server faults. ``rateLimited`` is retryable, but only after
     /// ``FaceCheckError/retryAfterSeconds``.
     public var isRetryable: Bool {

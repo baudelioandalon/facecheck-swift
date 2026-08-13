@@ -10,7 +10,7 @@ import XCTest
 /// serialised. This port writes the bytes itself, so the layout is testable
 /// directly — and it has to be, because every bug in this file is invisible from
 /// the client side and comes back from the backend as `MISSING_FILE` or
-/// `MISSING_EMAIL` with a perfectly valid payload sitting in the body.
+/// `MISSING_SUBJECT_ID` with a perfectly valid payload sitting in the body.
 ///
 /// The expected bodies below are assembled from explicit `\r\n` constants. They
 /// must never be written as Swift multi-line string literals, which produce `\n`.
@@ -31,15 +31,15 @@ final class MultipartBodyTests: XCTestCase {
     func testATextFieldGetsNeitherAFilenameNorAContentType() {
         // Werkzeug routes on the presence of a filename: a text field carrying
         // one lands in `request.files` and vanishes from `request.form`, so the
-        // backend answers MISSING_EMAIL with the email right there in the body.
+        // backend answers MISSING_SUBJECT_ID with the subject ID right there in the body.
         var form = MultipartFormData(boundary: boundary)
-        form.appendField(name: "email", value: "persona@ejemplo.com")
+        form.appendField(name: "subjectId", value: "person_01")
 
         let expected = joined([
             line("--\(boundary)"),
-            line(#"Content-Disposition: form-data; name="email""#),
+            line(#"Content-Disposition: form-data; name="subjectId""#),
             MultipartFormData.crlf,
-            line("persona@ejemplo.com"),
+            line("person_01"),
             line("--\(boundary)--"),
         ])
 
@@ -66,16 +66,16 @@ final class MultipartBodyTests: XCTestCase {
 
     func testTheFullEnrollBodyIsByteExact() {
         var form = MultipartFormData(boundary: boundary)
-        form.appendField(name: "email", value: "Persona@Ejemplo.com")
+        form.appendField(name: "subjectId", value: "Person_01")
         form.appendField(name: "overwrite", value: "true")
         form.appendImage(name: "selfie", bytes: Data("selfie-bytes".utf8))
         form.appendImage(name: "ine", bytes: Data("ine-bytes".utf8))
 
         let expected = joined([
             line("--\(boundary)"),
-            line(#"Content-Disposition: form-data; name="email""#),
+            line(#"Content-Disposition: form-data; name="subjectId""#),
             MultipartFormData.crlf,
-            line("Persona@Ejemplo.com"),
+            line("Person_01"),
             line("--\(boundary)"),
             line(#"Content-Disposition: form-data; name="overwrite""#),
             MultipartFormData.crlf,
@@ -110,7 +110,7 @@ final class MultipartBodyTests: XCTestCase {
 
     func testNoLineIsSeparatedByABareNewline() {
         var form = MultipartFormData(boundary: boundary)
-        form.appendField(name: "email", value: "persona@ejemplo.com")
+        form.appendField(name: "subjectId", value: "person_01")
         form.appendImage(name: "selfie", bytes: Data("x".utf8))
 
         // Every 0x0A in the body must be preceded by a 0x0D. A `\n` alone is
@@ -140,7 +140,7 @@ final class MultipartBodyTests: XCTestCase {
 
     func testTheAdvertisedContentTypeCarriesTheSameBoundaryAsTheBody() {
         var form = MultipartFormData(boundary: boundary)
-        form.appendField(name: "email", value: "persona@ejemplo.com")
+        form.appendField(name: "subjectId", value: "person_01")
 
         XCTAssertEqual(form.contentType, "multipart/form-data; boundary=\(boundary)")
         XCTAssertTrue(

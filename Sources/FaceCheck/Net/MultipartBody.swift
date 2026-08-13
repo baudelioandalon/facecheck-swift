@@ -46,7 +46,7 @@ struct MultipartFormData: Sendable {
     ///
     /// Werkzeug routes on the presence of a filename: a text field carrying one
     /// lands in `request.files` and vanishes from `request.form`, so the backend
-    /// answers `MISSING_EMAIL` with the email sitting right there in the body.
+    /// answers `MISSING_SUBJECT_ID` with the subject ID sitting right there in the body.
     mutating func appendField(name: String, value: String) {
         parts.append(
             Part(

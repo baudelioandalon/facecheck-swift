@@ -9,7 +9,7 @@ import Foundation
 ///
 /// let machine = try FaceCheck.makeChallengeMachine()   // observe machine.state in the UI
 /// let result = try await FaceCheck.verify(
-///     email: "persona@ejemplo.com",
+///     subjectId: "person_01",
 ///     camera: makeCameraController(viewController: host),
 ///     machine: machine
 /// )
@@ -44,8 +44,8 @@ import Foundation
 /// ### Threading
 ///
 /// ``initialize(_:)`` is expected once, from app startup, before any other call.
-/// ``enroll(email:camera:machine:grant:overwrite:ine:)`` and
-/// ``verify(email:camera:machine:compareWith:)`` are `nonisolated async` and safe
+/// ``enroll(subjectId:camera:machine:grant:overwrite:ine:)`` and
+/// ``verify(subjectId:camera:machine:compareWith:)`` are `nonisolated async` and safe
 /// to call from any actor; each runs its own independent session, though sharing
 /// one ``CameraController`` between concurrent sessions is not.
 public enum FaceCheck {
@@ -162,7 +162,7 @@ public enum FaceCheck {
         )
     }
 
-    /// Register `email`'s reference face: run a liveness session, then upload.
+    /// Registers a subject ID's reference face: run a liveness session, then upload.
     ///
     /// - Parameters:
     ///   - camera: supplies frames and the still; see ``CameraController``.
@@ -170,16 +170,16 @@ public enum FaceCheck {
     ///     builds one internally. It is an optional rather than a defaulted
     ///     expression because a Swift default argument cannot throw.
     ///   - grant: a short-lived token signed by the integrator's own **backend**
-    ///     authorising this address to be enrolled. Required for `lk_live_` keys
+    ///     authorising this subject ID to be enrolled. Required for `lk_live_` keys
     ///     and optional for `lk_test_` ones, because the API key ships inside the
     ///     app and so proves nothing about who the caller is: without a grant,
     ///     anyone who extracts it could bind their face to someone else's
-    ///     address. **The SDK never signs anything** — it receives an
+    ///     subject ID. **The SDK never signs anything** — it receives an
     ///     already-signed grant and forwards it, and the signing secret must
     ///     never reach the device. See
     ///     <https://facecheck.borealnetwork.org/docs/grants>.
-    ///   - overwrite: replace an existing enrollment for this address. Without
-    ///     it an already-enrolled address fails with
+    ///   - overwrite: replace an existing enrollment for this subject ID. Without
+    ///     it an already-enrolled subject fails with
     ///     ``FaceCheckErrorCode/subjectAlreadyEnrolled`` rather than being
     ///     silently replaced. With it, the backend still demands that the new
     ///     selfie match the stored template.
@@ -196,13 +196,14 @@ public enum FaceCheck {
     /// - Throws: ``FaceCheckError`` on a failed liveness session or a rejected
     ///   request.
     public static func enroll(
-        email: String,
+        subjectId: String,
         camera: any CameraController,
         machine: ChallengeMachine? = nil,
         grant: String? = nil,
         overwrite: Bool = false,
         ine: Data? = nil
     ) async throws -> EnrollResult {
+        try FaceCheckSubjectId.validate(subjectId)
         let state = try requireState()
         let session = try machine ?? makeChallengeMachine()
         let capture = try await runLivenessSession(
@@ -211,7 +212,7 @@ public enum FaceCheck {
             timeoutMs: Int64(state.config.livenessTimeoutMs)
         )
         return try await state.api.enroll(
-            email: email,
+            subjectId: subjectId,
             selfie: capture.still,
             ine: ine,
             grant: grant,
@@ -219,7 +220,7 @@ public enum FaceCheck {
         )
     }
 
-    /// Match a fresh selfie for `email` against what is stored.
+    /// Matches a fresh selfie for a subject ID against what is stored.
     ///
     /// - Parameter compareWith: which template to match. The backend may raise
     ///   this to a stricter comparison but never lowers it; see ``CompareWith``.
@@ -228,11 +229,12 @@ public enum FaceCheck {
     ///   request. A face that simply does not match is **not** an error: it comes
     ///   back as ``VerifyResult`` with `verified == false` and a reason.
     public static func verify(
-        email: String,
+        subjectId: String,
         camera: any CameraController,
         machine: ChallengeMachine? = nil,
         compareWith: CompareWith = .enrollment
     ) async throws -> VerifyResult {
+        try FaceCheckSubjectId.validate(subjectId)
         let state = try requireState()
         let session = try machine ?? makeChallengeMachine()
         let capture = try await runLivenessSession(
@@ -241,7 +243,7 @@ public enum FaceCheck {
             timeoutMs: Int64(state.config.livenessTimeoutMs)
         )
         return try await state.api.verify(
-            email: email,
+            subjectId: subjectId,
             selfie: capture.still,
             compareWith: compareWith
         )

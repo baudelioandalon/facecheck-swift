@@ -6,7 +6,7 @@ retrato de una INE, y guía la captura con retos de movimiento.
 
 ```swift
 try FaceCheck.initialize(FaceCheckConfig(apiKey: "lk_test_…", baseUrl: "…"))
-let resultado = try await FaceCheck.verify(email: "ana@ejemplo.com", camera: camara)
+let resultado = try await FaceCheck.verify(subjectId: "person_01", camera: camara)
 print(resultado.verified)
 ```
 
@@ -82,9 +82,10 @@ producción. Los datos de los dos modos están separados.
 
 ```swift
 let camara = makeCameraController(viewController: self)
+let subjectId = try FaceCheckSubjectId.generate(apiKey: config.apiKey)
 
 let resultado = try await FaceCheck.enroll(
-    email: "ana@ejemplo.com",
+    subjectId: subjectId,
     camera: camara,
     grant: grantDeTuBackend   // obligatorio con lk_live_
 )
@@ -94,18 +95,18 @@ print(resultado.enrolled)
 
 `grant` es un token corto que **tu backend** firma. Con llaves `lk_live_` es
 obligatorio: sin él, cualquiera con la llave de la app podría enrolar su cara
-contra el correo de otra persona.
+contra el ID de persona de otra persona.
 
 Para comparar después contra una INE, súbela en el mismo enrolamiento:
 
 ```swift
-try await FaceCheck.enroll(email: correo, camera: camara, grant: grant, ine: jpegDeLaINE)
+try await FaceCheck.enroll(subjectId: subjectId, camera: camara, grant: grant, ine: jpegDeLaINE)
 ```
 
 ### Verificar
 
 ```swift
-let resultado = try await FaceCheck.verify(email: "ana@ejemplo.com", camera: camara)
+let resultado = try await FaceCheck.verify(subjectId: "person_01", camera: camara)
 
 if resultado.verified {
     // adelante
@@ -120,7 +121,7 @@ Un rostro que no coincide **no es un error**: regresa como `VerifyResult` con
 Para comparar contra la INE en lugar del enrolamiento:
 
 ```swift
-try await FaceCheck.verify(email: correo, camera: camara, compareWith: .ine)
+try await FaceCheck.verify(subjectId: subjectId, camera: camara, compareWith: .ine)
 ```
 
 ### Pintar la UI
@@ -139,7 +140,7 @@ Task {
     }
 }
 
-let resultado = try await FaceCheck.verify(email: correo, camera: camara, machine: maquina)
+let resultado = try await FaceCheck.verify(subjectId: subjectId, camera: camara, machine: maquina)
 ```
 
 `instructionEs` cubre los seis estados —`idle`, `positioning`, `challengeActive`,

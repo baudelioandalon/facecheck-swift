@@ -2,7 +2,7 @@ import Foundation
 
 /// The `/enroll` response body: the subject's reference face is now stored.
 ///
-/// Enrollment is the primitive that binds a face to an email address, so it is
+/// Enrollment is the primitive that binds a face to a subject ID, so it is
 /// also the primitive an attacker would use to impersonate one. Replacing an
 /// existing enrollment therefore needs both an explicit `overwrite` flag and a
 /// selfie that already matches the stored template — possession of the API key

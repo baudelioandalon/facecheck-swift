@@ -293,16 +293,14 @@ final class FaceCheckAPIClient: Sendable {
         self.sleep = sleep
     }
 
-    /// Registers `email`'s reference face.
+    /// Registers a subject ID's reference face.
     ///
     /// Parts, in this order — the order does not matter to Werkzeug, but sending
     /// the text fields before the files lets a streaming parser reject a bad
-    /// email before spooling 10 MB, and keeps a wire diff against the Kotlin SDK
+    /// subject ID before spooling 10 MB, and keeps a wire diff against the Kotlin SDK
     /// empty:
     ///
-    /// 1. `email` — **not normalised**. Normalising is the backend's job
-    ///    (`http_io.normalize_email`); doing it in two places is how the two stop
-    ///    agreeing.
+    /// 1. `subjectId` — already canonicalised by ``FaceCheckSubjectId``.
     /// 2. `grant` — only when non-nil. Not filtered on emptiness, for parity.
     /// 3. `overwrite` — only when true, and then exactly the string `"true"`.
     ///    `parse_bool_flag` accepts only `true/1/yes/false/0/no`, so never
@@ -310,22 +308,23 @@ final class FaceCheckAPIClient: Sendable {
     /// 4. `selfie` — required.
     /// 5. `ine` — only when non-nil.
     func enroll(
-        email: String,
+        subjectId: String,
         selfie: Data,
         ine: Data? = nil,
         grant: String? = nil,
         overwrite: Bool = false
     ) async throws -> EnrollResult {
+        try FaceCheckSubjectId.validate(subjectId)
         // The grant is reported as present/none and never printed: it is a bearer
         // credential good for one enrollment. Image bytes only ever reach a log
         // through `describeBytes`, which reports a size and nothing else.
         FaceCheckLogger.info(
-            "enroll: email=\(email) selfie=\(FaceCheckLogger.describeBytes(selfie.count)) "
+            "enroll: selfie=\(FaceCheckLogger.describeBytes(selfie.count)) "
                 + "ine=\(ine.map { FaceCheckLogger.describeBytes($0.count) } ?? "none") "
                 + "grant=\(grant == nil ? "none" : "present") overwrite=\(overwrite)"
         )
         return try await post(Self.enrollPath) { form in
-            form.appendField(name: "email", value: email)
+            form.appendField(name: "subjectId", value: subjectId)
             if let grant {
                 form.appendField(name: "grant", value: grant)
             }
@@ -341,19 +340,19 @@ final class FaceCheckAPIClient: Sendable {
 
     /// Matches a fresh selfie against what is stored.
     ///
-    /// Parts: `email` (unnormalised), `compareWith` (**always** present, even at
+    /// Parts: `subjectId`, `compareWith` (**always** present, even at
     /// its default), then `selfie`.
     func verify(
-        email: String,
+        subjectId: String,
         selfie: Data,
         compareWith: CompareWith = .enrollment
     ) async throws -> VerifyResult {
+        try FaceCheckSubjectId.validate(subjectId)
         FaceCheckLogger.info(
-            "verify: email=\(email) selfie=\(FaceCheckLogger.describeBytes(selfie.count)) "
-                + "compareWith=\(compareWith.wire)"
+            "verify: selfie=\(FaceCheckLogger.describeBytes(selfie.count)) compareWith=\(compareWith.wire)"
         )
         return try await post(Self.verifyPath) { form in
-            form.appendField(name: "email", value: email)
+            form.appendField(name: "subjectId", value: subjectId)
             form.appendField(name: "compareWith", value: compareWith.wire)
             form.appendImage(name: "selfie", bytes: selfie)
         }
