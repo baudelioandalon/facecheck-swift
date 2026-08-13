@@ -16,4 +16,31 @@ final class SubjectIdTests: XCTestCase {
             ) != nil
         )
     }
+
+    func testValidatorRejectsSubjectIdWithTerminalLineFeed() {
+        assertInvalidSubjectId("person_01\n")
+    }
+
+    func testValidatorRejectsSubjectIdWithTerminalCRLF() {
+        assertInvalidSubjectId("person_01\r\n")
+    }
+
+    private func assertInvalidSubjectId(
+        _ subjectId: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertThrowsError(
+            try FaceCheckSubjectId.validate(subjectId),
+            file: file,
+            line: line
+        ) { error in
+            XCTAssertEqual(
+                (error as? FaceCheckError)?.code,
+                .invalidSubjectId,
+                file: file,
+                line: line
+            )
+        }
+    }
 }

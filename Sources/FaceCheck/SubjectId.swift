@@ -37,8 +37,10 @@ public enum FaceCheckSubjectId {
         guard !subjectId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw FaceCheckError(code: .missingSubjectId)
         }
-        let range = NSRange(subjectId.startIndex..., in: subjectId)
-        guard validPattern.firstMatch(in: subjectId, range: range) != nil else {
+        let fullRange = NSRange(subjectId.startIndex..., in: subjectId)
+        guard let match = validPattern.firstMatch(in: subjectId, range: fullRange),
+              match.range == fullRange
+        else {
             throw FaceCheckError(code: .invalidSubjectId)
         }
     }
