@@ -29,7 +29,7 @@ git, así que se apunta al repositorio directamente.
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/baudelioandalon/facecheck-swift.git", from: "0.1.0")
+    .package(url: "https://github.com/baudelioandalon/facecheck-swift.git", from: "1.0.0")
 ]
 ```
 
@@ -38,7 +38,7 @@ Desde Xcode: **File › Add Package Dependencies** y pega esa URL.
 ### CocoaPods
 
 ```ruby
-pod 'FaceCheck', '~> 0.1.0'
+pod 'FaceCheck', '~> 1.0.0'
 ```
 
 ### Requisitos
@@ -92,6 +92,11 @@ let resultado = try await FaceCheck.enroll(
 
 print(resultado.enrolled)
 ```
+
+El generador produce exactamente `sub_<huella>_<aleatorio>`: 10 caracteres
+Base32 de SHA-256 de la llave y 16 bytes criptográficamente seguros como 22
+caracteres Base64URL sin relleno. Guarda el ID opaco asociado a la cuenta de tu
+producto y reutilízalo al verificar.
 
 `grant` es un token corto que **tu backend** firma. Con llaves `lk_live_` es
 obligatorio: sin él, cualquiera con la llave de la app podría enrolar su cara

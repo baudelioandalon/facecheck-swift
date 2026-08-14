@@ -9,18 +9,37 @@ espera que siga significando lo mismo.
 
 ## [Sin publicar]
 
+Nada todavía.
+
+## [1.0.0] — 2026-08-13
+
+Candidato preparado localmente; todavía no fue publicado ni etiquetado.
+
 ### Cambiado
 
 - **Ruptura de API:** `FaceCheck.enroll` y `FaceCheck.verify` ahora requieren
   `subjectId:`; el campo multipart `email` fue eliminado.
 - Se reemplazaron `MISSING_EMAIL` e `INVALID_EMAIL` por
   `MISSING_SUBJECT_ID` e `INVALID_SUBJECT_ID`.
+- No existen sobrecargas, alias ni compatibilidad para `email:`: las
+  integraciones deben migrar de forma explícita.
 
 ### Agregado
 
 - `FaceCheckSubjectId.generate(apiKey:)` crea IDs opacos con una huella SHA-256
-  codificada en Base32 y 128 bits aleatorios de `SecRandomCopyBytes`; no expone
-  la llave de API.
+  codificada en Base32 y 128 bits aleatorios de `SecRandomCopyBytes`; el formato
+  exacto es `sub_<huella>_<aleatorio>`
+  (`^sub_[A-Z2-7]{10}_[A-Za-z0-9_-]{22}$`), con los primeros 10 caracteres
+  Base32 de SHA-256 y 16 bytes en Base64URL sin relleno. No expone la llave.
+
+### Orden de lanzamiento
+
+1. Desplegar Functions TypeScript y Python con el contrato `subjectId`.
+2. Validar `/enroll` y `/verify` en un entorno autorizado con datos sintéticos.
+3. Publicar KMP, Swift, Android y CLI 1.0.0.
+4. Desplegar el portal con la documentación y el directorio compatibles.
+
+Este orden es una lista de ejecución; este cambio no despliega ni publica nada.
 
 ## [0.1.0] — 2026-08-12
 
@@ -49,4 +68,6 @@ las mismas pruebas de comportamiento portadas desde `facecheck-kmp`.
 - El anti-spoofing pasivo no es funcional y los retos de vida no son un control
   de seguridad. Ver las limitaciones en el README.
 
+[Sin publicar]: https://github.com/baudelioandalon/facecheck-swift/compare/1.0.0...HEAD
+[1.0.0]: https://github.com/baudelioandalon/facecheck-swift/releases/tag/1.0.0
 [0.1.0]: https://github.com/baudelioandalon/facecheck-swift/releases/tag/0.1.0
