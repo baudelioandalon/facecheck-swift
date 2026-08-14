@@ -38,6 +38,9 @@ Candidato preparado localmente; todavía no fue publicado ni etiquetado.
 2. Validar `/enroll` y `/verify` en un entorno autorizado con datos sintéticos.
 3. Publicar KMP, Swift, Android y CLI 1.0.0.
 4. Desplegar el portal con la documentación y el directorio compatibles.
+5. Antes de etiquetar y hacer push, inspeccionar de nuevo `git status`, el diff
+   y el historial local frente al remoto; etiquetar y hacer push solo con
+   autorización explícita.
 
 Este orden es una lista de ejecución; este cambio no despliega ni publica nada.
 
